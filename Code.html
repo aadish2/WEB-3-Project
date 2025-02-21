@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voting Rewards System</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.8.2/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.3.1/dist/confetti.browser.min.js"></script>
+
+    <style>
+        /* Background Image (Auto Adjust) */
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: url('Back.jpg') no-repeat center center/cover;
+            background-attachment: fixed;
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+            position: relative;
+        }
+
+        /* Dark overlay for better readability */
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: -1;
+        }
+
+        .app-wrapper {
+            max-width: 800px;
+            margin: auto;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .candidate-card {
+            display: inline-block;
+            margin: 15px;
+            text-align: center;
+        }
+
+        .candidate-card img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+        }
+
+        /* Celebration Popup */
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <header>
+            <h1>Vote for Your Candidate</h1>
+            <p>Cast your vote and watch the live results!</p>
+        </header>
+
+        <main class="voting-section">
+            <div class="candidate-card">
+                <img src="https://img.freepik.com/premium-photo/avatar-resourcing-company_1254967-6696.jpg" alt="Candidate A">
+                <h2>Candidate A</h2>
+                <button onclick="vote('A')">Vote for A</button>
+            </div>
+            <div class="candidate-card">
+                <img src="https://img.freepik.com/free-psd/3d-illustration-with-online-avatar_23-2151303097.jpg" alt="Candidate B">
+                <h2>Candidate B</h2>
+                <button onclick="vote('B')">Vote for B</button>
+            </div>
+            <div class="candidate-card">
+                <img src="https://img.freepik.com/free-psd/3d-illustration-business-man-with-glasses_23-2149436194.jpg?w=740" alt="Candidate C">
+                <h2>Candidate C</h2>
+                <button onclick="vote('C')">Vote for C</button>
+            </div>
+        </main>
+
+        <section class="results-section">
+            <h2>Live Voting Results</h2>
+            <canvas id="resultsChart"></canvas>
+            <p>Total Votes: <span id="totalVotes">0</span></p>
+            <button id="reset" onclick="resetVotes()">Reset Votes</button>
+        </section>
+
+        <section class="wallet-section">
+            <p id="status">Not Connected</p>
+            <button id="connectWallet">Connect Wallet</button>
+            <button onclick="collectReward()">Collect Reward</button>
+        </section>
+    </div>
+
+    <!-- Celebration Popup -->
+    <div id="celebrationPopup" class="popup">
+        <div class="popup-content">
+            <h2>🎉 Congratulations! 🎉</h2>
+            <p>You successfully collected your reward!</p>
+            <button onclick="closePopup()">OK</button>
+        </div>
+    </div>
+
+    <script>
+        const contractAddress = "0x2E82a14E6fcFF8047AB1509531581444De4E2b0C"; // Replace with actual contract address
+        const contractABI = [
+            { "inputs": [{ "internalType": "uint8", "name": "candidateIndex", "type": "uint8" }], "name": "vote", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+            { "inputs": [], "name": "claimReward", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
+        ];
+
+        let web3;
+        let contract;
+        let userAccount;
+        let votes = { A: 0, B: 0, C: 0 };
+        let totalVotes = 0;
+
+        // Connect Wallet Function
+        async function connectWallet() {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                    userAccount = accounts[0];
+                    document.getElementById("status").innerText = `Connected: ${accounts[0]}`;
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                } catch (error) {
+                    alert("Wallet connection failed.");
+                }
+            } else {
+                alert("MetaMask not detected. Please install MetaMask!");
+            }
+        }
+
+        // Vote Function
+        async function vote(candidate) {
+            if (!contract || !userAccount) {
+                alert("Connect your wallet first.");
+                return;
+            }
+
+            try {
+                await contract.methods.vote(candidate).send({ from: userAccount });
+                votes[candidate]++;
+                totalVotes++;
+                updateChart();
+                alert(`Successfully voted for Candidate ${candidate}!`);
+            } catch (error) {
+                alert("Voting transaction failed.");
+            }
+        }
+
+        // Collect Reward Function
+        async function collectReward() {
+            if (!contract || !userAccount) {
+                alert("Connect your wallet first.");
+                return;
+            }
+
+            try {
+                await contract.methods.claimReward().send({ from: userAccount });
+                launchConfetti();
+                showPopup();
+            } catch (error) {
+                alert("Reward collection failed.");
+            }
+        }
+
+        // Confetti Effect
+        function launchConfetti() {
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        }
+
+        // Show Celebration Popup
+        function showPopup() {
+            document.getElementById("celebrationPopup").style.display = "block";
+        }
+
+        // Close Celebration Popup
+        function closePopup() {
+            document.getElementById("celebrationPopup").style.display = "none";
+        }
+
+        // Voting Chart
+        const ctx = document.getElementById("resultsChart").getContext("2d");
+        const resultsChart = new Chart(ctx, {
+            type: "bar",
+            data: { labels: ["A", "B", "C"], datasets: [{ label: "Votes", data: [0, 0, 0], backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56"] }] }
+        });
+
+        function updateChart() {
+            resultsChart.data.datasets[0].data = [votes.A, votes.B, votes.C];
+            resultsChart.update();
+        }
+
+        function resetVotes() {
+            votes = { A: 0, B: 0, C: 0 };
+            totalVotes = 0;
+            updateChart();
+        }
+
+        document.getElementById("connectWallet").addEventListener("click", connectWallet);
+    </script>
+</body>
+</html>
